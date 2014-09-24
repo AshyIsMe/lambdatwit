@@ -21,11 +21,8 @@ import Control.Monad.Trans.Resource
 import Control.Monad.IO.Class
 import System.IO (hFlush, stdout)
 
-tokens :: OAuth
-tokens = twitterOAuth
-    { oauthConsumerKey = error "You MUST specify oauthConsumerKey parameter."
-    , oauthConsumerSecret = error "You MUST specify oauthConsumerSecret parameter."
-    }
+import Tokens
+
 
 authorize :: (MonadBaseControl IO m, MonadResource m)
           => OAuth -- ^ OAuth Consumer key and secret

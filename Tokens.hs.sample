@@ -1,0 +1,13 @@
+
+module Tokens where
+
+import Web.Twitter.Conduit
+import Web.Authenticate.OAuth (OAuth(..), Credential(..))
+
+tokens :: OAuth
+tokens = twitterOAuth
+-- Replace these with your oauth keys
+    { oauthConsumerKey = error "You MUST specify oauthConsumerKey parameter."
+    , oauthConsumerSecret = error "You MUST specify oauthConsumerSecret parameter."
+    }
+
