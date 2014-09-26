@@ -11,3 +11,8 @@ tokens = twitterOAuth
     , oauthConsumerSecret = error "You MUST specify oauthConsumerSecret parameter."
     }
 
+-- Do the First Run and then replace these "REPLACE ME" values with the correct keys
+creds = Credential {unCredential = [("oauth_token","REPLACE ME"),
+                                    ("oauth_token_secret","REPLACE ME"),
+                                    ("user_id","REPLACE ME"),
+                                    ("screen_name","REPLACE ME")]}

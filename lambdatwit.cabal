@@ -33,6 +33,9 @@ executable lambdatwit
     , twitter-types
     , twitter-conduit
     , twitter-types
+    , mueval
+    , hint
+    , utf8-string
 
   -- hs-source-dirs:      
   default-language:    Haskell2010
