@@ -11,7 +11,6 @@ import           Control.Monad.Logger
 import           Control.Monad.Trans.Control
 import           Control.Monad.Trans.Resource
 import           Data.Default
-import           Data.Monoid
 import           Network.HTTP.Conduit
 import           System.Environment
 import           System.IO (hFlush, stdout)
@@ -34,6 +33,8 @@ import Mueval.Interpreter
 import Mueval.ArgsParse
 
 import Tokens
+
+import Control.Monad.Trans.Reader 
 
 import Debug.Trace
 
@@ -61,6 +62,7 @@ withCredential task = do
         hFlush stdout
         getLine
 
+
 isHaskellExpression :: T.Text -> T.Text -> Bool
 isHaskellExpression myUserName post = T.isPrefixOf myUserName post
 
@@ -71,77 +73,22 @@ getHaskellExpression t =
       (_, rest) -> T.strip rest
 
 isHaskellPost :: T.Text -> Status -> Bool
-isHaskellPost userName status = 
+isHaskellPost userName status =
     T.isPrefixOf userName $ status ^. statusText
 
 evalExpr :: String -> IO String
-evalExpr e = 
+evalExpr e =
       case getOptions ["--expression", e] of
         Left t@(b, e) -> return $ show t
         Right opts -> do
           r <- runInterpreter (interpreter opts)
           case r of
               Left err -> return $ show err
-              Right (e,et,val) -> do (out, b) <- getResult val 
+              Right (e,et,val) -> do (out, b) <- getResult val
                                      return out
 
 getResult :: (Functor m, MonadIO m) => String -> m (String, Bool)
 getResult str = render 1024 str
-
-
-{-Testing eval-}
-testEval :: IO ()
-testEval =
-    let expr = "7 * 6" in
-      case getOptions ["--expression", expr] of
-        Right opts -> do
-          sTest <- evalExpr expr
-          putStrLn $ "sTest: " ++ sTest
-          r <- runInterpreter (interpreter opts)
-          case r of
-              Left err -> printInterpreterError err
-              Right (e,et,val) -> do when (printType opts)
-                                          (sayIO e >> sayIOOneLine et)
-                                     sayIO val
-               where sayIOOneLine = sayIO . unwords . words
-        Left t@(b, e) -> putStrLn $ show t
-
---First Run: 
-{-main :: IO ()-}
-{-main = runNoLoggingT . withCredential $ do-}
-    {-liftIO . putStrLn $ "Copy the creds above into your Token.hs file."-}
-    {-liftIO . putStrLn $ "Then swap out the main function in Main.hs and recompile."-}
-
-main :: IO ()
-main =
-    let env = setCredential tokens creds def in
-      runNoLoggingT . runTW env $ do
-        liftIO . putStrLn $ "# your mentions timeline (up to 100 tweets):"
-        mentions <- call mentionsTimeline
-        let res = filter (isHaskellPost "@LambdaTwit") mentions
-        {-liftIO . putStrLn $ show res-}
-        liftIO . putStrLn $ "# Eval results:"
-        mapM_ evalExpressions res
-          where evalExpressions = \status -> do
-                  r <- liftIO $ evalExpr $ T.unpack $ getHaskellExpression $ status ^. statusText
-                  liftIO . putStrLn $ (show $ status ^. statusText ) ++ ": " ++ r
-
-{-evalExpressions :: MonadIO m => Status -> m ()-}
-{-evalExpressions status = do-}
-    {-r <- liftIO $ evalExpr $ T.unpack $ getHaskellExpression $ status ^. statusText-}
-    {-liftIO . putStrLn $ (show $ status ^. statusText ) ++ ": " ++ r-}
-
-{-conduitmain :: IO ()-}
-{-conduitmain =-}
-    {-let env = setCredential tokens creds def in-}
-      {-runNoLoggingT . runTW env $ do-}
-        {-liftIO . putStrLn $ "# your mentions timeline (up to 100 tweets):"-}
-        {-sourceWithMaxId homeTimeline-}
-             {-C.$= CL.isolate 100-}
-             {-C.$$ CL.mapM_ $ \status -> liftIO $ do-}
-                 {-T.putStrLn $ statusToText status-}
-                 {-evalExpressions status-}
-
 
 statusToText :: Status -> T.Text
 statusToText status = T.concat [ T.pack . show $ status ^. statusId
@@ -150,3 +97,54 @@ statusToText status = T.concat [ T.pack . show $ status ^. statusId
                                        , ": "
                                        , status ^. statusText
                                        ]
+
+{-evalExpression :: MonadIO m => Status -> m ()-}
+evalExpression :: MonadIO m => Status -> m String
+evalExpression status = do
+    r <- liftIO $ evalExpr $ T.unpack $ getHaskellExpression $ status ^. statusText
+    {-return $ (show $ status ^. statusText ) ++ ": " ++ r-}
+    return r
+
+-- res <- call $ update "Hello World"
+reply :: Integer -> T.Text -> APIRequest StatusesUpdate Status
+reply i s =
+  update s & inReplyToStatusId ?~ i
+
+--First Run:
+firstrunMain :: IO ()
+firstrunMain = runNoLoggingT . withCredential $ do
+    liftIO . putStrLn $ "Copy the creds above into your Token.hs file."
+    liftIO . putStrLn $ "Then swap out the main function in Main.hs and recompile."
+
+nonconduitMain :: IO ()
+nonconduitMain =
+    let env = setCredential tokens creds def in
+      runNoLoggingT . runTW env $ do
+        liftIO . putStrLn $ "# your mentions timeline (up to 100 tweets):"
+        mentions <- call mentionsTimeline
+        let res = filter (isHaskellPost "@LambdaTwit") mentions
+        liftIO . putStrLn $ "# Eval results:"
+        mapM_ printExpression res
+          where printExpression s = do
+                  r <- evalExpression s
+                  return $ putStrLn r
+
+conduitmain :: IO ()
+conduitmain =
+    let env = setCredential tokens creds def in
+      runNoLoggingT . runTW env $ do
+        {-liftIO . putStrLn $ "# your mentions timeline (up to 100 tweets):"-}
+        sourceWithMaxId mentionsTimeline
+             C.$= CL.isolate 100
+             C.$$ CL.mapM_ $ \status -> liftIO $ do
+                 T.putStrLn $ statusToText status
+                 res <- evalExpression status
+                 putStrLn res
+                 postres <- liftIO $ call (reply 1234567890 (T.pack res))
+                 liftIO $ print postres
+
+main :: IO ()
+main = conduitmain
+{-main = firstrunMain-}
+{-main = nonconduitMain-}
+
