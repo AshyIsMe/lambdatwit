@@ -103,7 +103,7 @@ evalExpression :: MonadIO m => Status -> m String
 evalExpression status = do
     r <- liftIO $ evalExpr $ T.unpack $ getHaskellExpression $ status ^. statusText
     {-return $ (show $ status ^. statusText ) ++ ": " ++ r-}
-    return r
+    return $ take 140 r
 
 -- res <- call $ update "Hello World"
 reply :: Integer -> T.Text -> APIRequest StatusesUpdate Status
@@ -136,11 +136,16 @@ conduitmain =
         {-liftIO . putStrLn $ "# your mentions timeline (up to 100 tweets):"-}
         sourceWithMaxId mentionsTimeline
              C.$= CL.isolate 100
-             C.$$ CL.mapM_ $ \status -> liftIO $ do
-                 T.putStrLn $ statusToText status
+             C.$$ CL.mapM_ $ \status -> do
+                 liftIO $ T.putStrLn $ statusToText status
                  res <- evalExpression status
-                 putStrLn res
-                 postres <- liftIO $ call (reply 1234567890 (T.pack res))
+                 liftIO $ putStrLn res
+                 let i = status ^. statusId
+                 postres <- call (reply i $ (T.take 140 $ 
+                                 T.concat ["@", 
+                                          status ^. statusUser ^. userScreenName,
+                                          " ",
+                                          T.pack res]))
                  liftIO $ print postres
 
 main :: IO ()
