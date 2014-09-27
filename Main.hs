@@ -6,6 +6,7 @@
 
 module Main where
 
+import           Control.Concurrent (threadDelay)
 import           Control.Monad (forever)
 import           Control.Monad.Reader (ask)
 import           Control.Monad.State (modify)
@@ -111,24 +112,12 @@ reply :: Integer -> T.Text -> APIRequest StatusesUpdate Status
 reply i s =
   Web.Twitter.Conduit.update s & inReplyToStatusId ?~ i
 
---First Run:
-firstrunMain :: IO ()
-firstrunMain = runNoLoggingT . withCredential $ do
-    liftIO . putStrLn $ "Copy the creds above into your Token.hs file."
-    liftIO . putStrLn $ "Then swap out the main function in Main.hs and recompile."
-
-nonconduitMain :: IO ()
-nonconduitMain =
-    let env = setCredential tokens creds def in
-      runNoLoggingT . runTW env $ do
-        liftIO . putStrLn $ "# your mentions timeline (up to 100 tweets):"
-        mentions <- call mentionsTimeline
-        let res = filter (isHaskellPost "@LambdaTwit") mentions
-        liftIO . putStrLn $ "# Eval results:"
-        mapM_ printExpression res
-          where printExpression s = do
-                  r <- evalExpression s
-                  return $ putStrLn r
+postreply :: (MonadResource m, MonadLogger m) => Status -> Integer -> String -> TW m Status
+postreply status i res = call (reply i $ (T.take 140 $
+                                 T.concat ["@",
+                                          status ^. statusUser ^. userScreenName,
+                                          " ",
+                                          T.pack res]))
 
 {-Acid State database to keep track of replies-}
 data TweetId = TweetId { tweetId :: Integer }
@@ -151,7 +140,6 @@ makeAcidic ''LambdaTwitDb ['allReplies, 'addReply]
 conduitmain :: IO ()
 conduitmain = do
   state <- openLocalState (LambdaTwitDb [])
-
   forever $ do
     let env = setCredential tokens creds def in
       runNoLoggingT . runTW env $ do
@@ -164,6 +152,7 @@ conduitmain = do
                    then do
                      liftIO $ putStrLn "Already replied to:"
                      liftIO $ T.putStrLn $ statusToText status
+                     liftIO $ threadDelay $ 60 * 1000000
                    else do
                      liftIO $ T.putStrLn $ statusToText status
                      res <- evalExpression status
@@ -171,17 +160,15 @@ conduitmain = do
                      postres <- postreply status (status ^. statusId) res
                      liftIO $ Data.Acid.update state (AddReply $ TweetId (status ^. statusId))
                      liftIO $ print postres
+                     liftIO $ threadDelay $ 60 * 1000000
 
-postreply :: (MonadResource m, MonadLogger m) => Status -> Integer -> String -> TW m Status
-postreply status i res = call (reply i $ (T.take 140 $
-                                 T.concat ["@",
-                                          status ^. statusUser ^. userScreenName,
-                                          " ",
-                                          T.pack res]))
-
+--First Run:
+firstrunMain :: IO ()
+firstrunMain = runNoLoggingT . withCredential $ do
+    liftIO . putStrLn $ "Copy the creds above into your Token.hs file."
+    liftIO . putStrLn $ "Then swap out the main function in Main.hs and recompile."
 
 main :: IO ()
 main = conduitmain
 {-main = firstrunMain-}
-{-main = nonconduitMain-}
 
