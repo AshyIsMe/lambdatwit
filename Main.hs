@@ -6,12 +6,10 @@
 
 module Main where
 
-import           Control.Monad (forM_,guard,mplus,unless,when,forever)
-import           Control.Monad.Error (catchError)
+import           Control.Monad (forever)
 import           Control.Monad.Reader (ask)
 import           Control.Monad.State (modify)
 import           Control.Applicative
-import           Control.Exception
 import           Control.Lens
 import           Control.Monad.IO.Class
 import           Control.Monad.Logger
@@ -19,7 +17,6 @@ import           Control.Monad.Trans.Control
 import           Control.Monad.Trans.Resource
 import           Data.Default
 import           Network.HTTP.Conduit
-import           System.Environment
 import           System.IO (hFlush, stdout)
 import           Web.Authenticate.OAuth (OAuth(..), Credential(..))
 import           Web.Twitter.Conduit
