@@ -18,24 +18,27 @@ cabal-version:       >=1.10
 executable lambdatwit
   main-is: Main.hs
   build-depends: base >=4.6 && <4.7
-    , transformers-base
-    , transformers
-    , monad-control
-    , lens
-    , bytestring
-    , text
-    , data-default
-    , resourcet
-    , conduit
-    , http-conduit
-    , monad-logger
-    , authenticate-oauth
-    , twitter-types
-    , twitter-conduit
-    , twitter-types
-    , mueval
-    , hint
-    , utf8-string
+               , acid-state
+               , authenticate-oauth
+               , bytestring
+               , conduit
+               , data-default
+               , hint
+               , http-conduit
+               , lens
+               , monad-control
+               , monad-logger
+               , mtl
+               , mueval
+               , resourcet
+               , safecopy
+               , text
+               , transformers
+               , transformers-base
+               , twitter-conduit
+               , twitter-types
+               , twitter-types
+               , utf8-string
 
   -- hs-source-dirs:      
   default-language:    Haskell2010

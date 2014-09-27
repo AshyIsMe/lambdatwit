@@ -1,10 +1,17 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Main where
 
-import           Control.Monad (forM_,guard,mplus,unless,when)
+import           Control.Monad (forM_,guard,mplus,unless,when,forever)
+import           Control.Monad.Error (catchError)
+import           Control.Monad.Reader (ask)
+import           Control.Monad.State (modify)
 import           Control.Applicative
+import           Control.Exception
 import           Control.Lens
 import           Control.Monad.IO.Class
 import           Control.Monad.Logger
@@ -23,9 +30,9 @@ import qualified Data.Conduit.List as CL
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Web.Authenticate.OAuth as OA
-
-import           System.Exit (exitFailure)
-import qualified System.IO.UTF8 as UTF (putStrLn)
+import           Data.Acid
+import           Data.SafeCopy
+import           Data.Typeable
 
 import Language.Haskell.Interpreter (runInterpreter)
 
@@ -34,9 +41,6 @@ import Mueval.ArgsParse
 
 import Tokens
 
-import Control.Monad.Trans.Reader 
-
-import Debug.Trace
 
 authorize :: (MonadBaseControl IO m, MonadResource m)
           => OAuth -- ^ OAuth Consumer key and secret
@@ -108,7 +112,7 @@ evalExpression status = do
 -- res <- call $ update "Hello World"
 reply :: Integer -> T.Text -> APIRequest StatusesUpdate Status
 reply i s =
-  update s & inReplyToStatusId ?~ i
+  Web.Twitter.Conduit.update s & inReplyToStatusId ?~ i
 
 --First Run:
 firstrunMain :: IO ()
@@ -129,24 +133,55 @@ nonconduitMain =
                   r <- evalExpression s
                   return $ putStrLn r
 
+{-Acid State database to keep track of replies-}
+data TweetId = TweetId { tweetId :: Integer }
+             deriving (Eq, Show, Typeable)
+data LambdaTwitDb = LambdaTwitDb { allReplyIds :: [TweetId] }
+                  deriving (Typeable)
+
+allReplies :: Query LambdaTwitDb [TweetId]
+allReplies = allReplyIds <$> ask
+
+addReply :: TweetId -> Update LambdaTwitDb ()
+addReply tweetId = modify go
+  where go (LambdaTwitDb db) = LambdaTwitDb $ tweetId : db
+
+{-The Acid State magic-}
+deriveSafeCopy 0 'base ''TweetId
+deriveSafeCopy 0 'base ''LambdaTwitDb
+makeAcidic ''LambdaTwitDb ['allReplies, 'addReply]
+
 conduitmain :: IO ()
-conduitmain =
+conduitmain = do
+  state <- openLocalState (LambdaTwitDb [])
+
+  forever $ do
     let env = setCredential tokens creds def in
       runNoLoggingT . runTW env $ do
         {-liftIO . putStrLn $ "# your mentions timeline (up to 100 tweets):"-}
         sourceWithMaxId mentionsTimeline
              C.$= CL.isolate 100
              C.$$ CL.mapM_ $ \status -> do
-                 liftIO $ T.putStrLn $ statusToText status
-                 res <- evalExpression status
-                 liftIO $ putStrLn res
-                 let i = status ^. statusId
-                 postres <- call (reply i $ (T.take 140 $ 
-                                 T.concat ["@", 
+                 replies <- liftIO $ query state AllReplies
+                 if ((TweetId (status ^. statusId)) `elem` replies)
+                   then do
+                     liftIO $ putStrLn "Already replied to:"
+                     liftIO $ T.putStrLn $ statusToText status
+                   else do
+                     liftIO $ T.putStrLn $ statusToText status
+                     res <- evalExpression status
+                     liftIO $ putStrLn res
+                     postres <- postreply status (status ^. statusId) res
+                     liftIO $ Data.Acid.update state (AddReply $ TweetId (status ^. statusId))
+                     liftIO $ print postres
+
+postreply :: (MonadResource m, MonadLogger m) => Status -> Integer -> String -> TW m Status
+postreply status i res = call (reply i $ (T.take 140 $
+                                 T.concat ["@",
                                           status ^. statusUser ^. userScreenName,
                                           " ",
                                           T.pack res]))
-                 liftIO $ print postres
+
 
 main :: IO ()
 main = conduitmain
