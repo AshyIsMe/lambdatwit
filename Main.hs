@@ -7,7 +7,7 @@
 module Main where
 
 import           Control.Concurrent (threadDelay)
-import           Control.Monad (forever)
+import           Control.Monad (when,forever)
 import           Control.Monad.Reader (ask)
 import           Control.Monad.State (modify)
 import           Control.Applicative
@@ -31,6 +31,7 @@ import qualified Web.Authenticate.OAuth as OA
 import           Data.Acid
 import           Data.SafeCopy
 import           Data.Typeable
+import           Data.String.Utils
 
 import Language.Haskell.Interpreter (runInterpreter)
 
@@ -39,6 +40,7 @@ import Mueval.ArgsParse
 
 import Tokens
 
+{-import Debug.Trace-}
 
 authorize :: (MonadBaseControl IO m, MonadResource m)
           => OAuth -- ^ OAuth Consumer key and secret
@@ -100,12 +102,19 @@ statusToText status = T.concat [ T.pack . show $ status ^. statusId
                                        , status ^. statusText
                                        ]
 
-{-evalExpression :: MonadIO m => Status -> m ()-}
 evalExpression :: MonadIO m => Status -> m String
 evalExpression status = do
-    r <- liftIO $ evalExpr $ T.unpack $ getHaskellExpression $ status ^. statusText
-    {-return $ (show $ status ^. statusText ) ++ ": " ++ r-}
+    r <- liftIO $ evalExpr $ decodeHtml $ T.unpack $ getHaskellExpression $ status ^. statusText
     return $ take 140 r
+
+{-TODO: Make this more comprehensive-}
+decodeHtml :: String -> String
+decodeHtml s =
+    replace "&lt;" "<" $
+    replace "&gt;" ">" $
+    replace "&amp;" "&" $
+    replace "&quot;" "\"" $
+    replace "&#39;" "'" $ s
 
 -- res <- call $ update "Hello World"
 reply :: Integer -> T.Text -> APIRequest StatusesUpdate Status
@@ -118,6 +127,7 @@ postreply status i res = call (reply i $ (T.take 140 $
                                           status ^. statusUser ^. userScreenName,
                                           " ",
                                           T.pack res]))
+
 
 {-Acid State database to keep track of replies-}
 data TweetId = TweetId { tweetId :: Integer }
@@ -141,6 +151,7 @@ conduitmain :: IO ()
 conduitmain = do
   state <- openLocalState (LambdaTwitDb [])
   forever $ do
+    {-TODO: Use Data.Configurator to read in the oauth keys without needing a recompile-}
     let env = setCredential tokens creds def in
       runNoLoggingT . runTW env $ do
         {-liftIO . putStrLn $ "# your mentions timeline (up to 100 tweets):"-}
@@ -172,3 +183,26 @@ main :: IO ()
 main = conduitmain
 {-main = firstrunMain-}
 
+{-TODO: Test html decoding:-}
+{-lambdagrrl: @LambdaTwit (*) &lt;$&gt; [1..10] &lt;*&gt; [1..10]-}
+
+
+{-[>Testing eval<]-}
+{-testEval :: IO ()-}
+{-testEval =-}
+    {-[>let expr = T.pack "\"life \63743 = \" ++ show (7 * 6)" in<]-}
+    {-let expr = T.pack $ decodeHtml "4 &lt; 42" in-}
+      {-case getOptions ["--expression", T.unpack expr] of-}
+        {-Right opts -> do-}
+          {-sTest <- evalExpr $ decodeHtml $ T.unpack expr-}
+          {-T.putStrLn $ T.pack $ "sTest: " ++ sTest-}
+          {-r <- runInterpreter (interpreter opts)-}
+          {-case r of-}
+              {-Left err -> traceShow "eval error: " $ printInterpreterError err-}
+              {-Right (e,et,val) -> do when (printType opts)-}
+                                          {-(sayIO e >> sayIOOneLine et)-}
+                                     {-sayIO val-}
+               {-where sayIOOneLine = sayIO . unwords . words-}
+        {-Left t@(b, e) -> putStrLn $ show t-}
+
+{-main = testEval-}
