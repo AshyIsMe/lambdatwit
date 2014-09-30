@@ -37,7 +37,6 @@ executable lambdatwit
                , transformers-base
                , twitter-conduit
                , twitter-types
-               , twitter-types
                , utf8-string
                , MissingH
 
