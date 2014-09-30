@@ -53,8 +53,8 @@ authorize oauth getPIN mgr = do
     pin <- getPIN url
     OA.getAccessToken oauth (OA.insert "oauth_verifier" (B8.pack pin) cred) mgr
 
-withCredential :: (MonadLogger m, MonadBaseControl IO m, MonadIO m) => TW (ResourceT m) a -> m a
-withCredential task = do
+withCredential :: (MonadLogger m, MonadBaseControl IO m, MonadIO m) => OAuth -> TW (ResourceT m) a -> m a
+withCredential tokens task = do
     cred <- liftIO $ withManager $ \mgr -> authorize tokens getPIN mgr
     _ <- liftIO $ putStrLn $ show cred
     let env = setCredential tokens cred def
@@ -147,8 +147,8 @@ deriveSafeCopy 0 'base ''TweetId
 deriveSafeCopy 0 'base ''LambdaTwitDb
 makeAcidic ''LambdaTwitDb ['allReplies, 'addReply]
 
-conduitmain :: IO ()
-conduitmain = do
+conduitmain :: OAuth -> Credential -> IO ()
+conduitmain tokens creds = do
   state <- openLocalState (LambdaTwitDb [])
   forever $ do
     {-TODO: Use Data.Configurator to read in the oauth keys without needing a recompile-}
@@ -173,15 +173,11 @@ conduitmain = do
                      liftIO $ print postres
                      liftIO $ threadDelay $ 60 * 1000000
 
---First Run:
-firstrunMain :: IO ()
-firstrunMain = runNoLoggingT . withCredential $ do
-    liftIO . putStrLn $ "Copy the creds above into your Token.hs file."
-    liftIO . putStrLn $ "Then swap out the main function in Main.hs and recompile."
-
 main :: IO ()
-main = conduitmain
-{-main = firstrunMain-}
+main = do
+  tokens <- getTokens
+  creds <- getCreds
+  conduitmain tokens creds
 
 {-TODO: Test html decoding:-}
 {-lambdagrrl: @LambdaTwit (*) &lt;$&gt; [1..10] &lt;*&gt; [1..10]-}
