@@ -1,6 +1,7 @@
 
 module Tokens where
 
+import Data.Text
 import Web.Twitter.Conduit
 import Web.Authenticate.OAuth (OAuth(..), Credential(..))
 
