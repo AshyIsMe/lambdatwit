@@ -4,6 +4,8 @@ module Tokens where
 import Web.Twitter.Conduit
 import Web.Authenticate.OAuth (OAuth(..), Credential(..))
 
+botScreenName = "LambdaTwit" :: Text
+
 tokens :: OAuth
 tokens = twitterOAuth
 -- Replace these with your oauth keys
