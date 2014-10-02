@@ -6,17 +6,25 @@
 
 module Main where
 
-import           Control.Concurrent (threadDelay)
-import           Control.Monad (when,forever)
-import           Control.Monad.Reader (ask)
-import           Control.Monad.State (modify)
 import           Control.Applicative
+import           Control.Concurrent (threadDelay)
 import           Control.Lens
+import           Control.Monad (when,forever)
+import           Control.Monad.Catch (try)
 import           Control.Monad.IO.Class
 import           Control.Monad.Logger
+import           Control.Monad.Reader (ask)
+import           Control.Monad.State (modify)
 import           Control.Monad.Trans.Control
 import           Control.Monad.Trans.Resource
+import           Data.Acid
 import           Data.Default
+import           Data.SafeCopy
+import           Data.String.Utils
+import           Data.Typeable
+import           Language.Haskell.Interpreter (runInterpreter)
+import           Mueval.ArgsParse
+import           Mueval.Interpreter
 import           Network.HTTP.Conduit
 import           System.IO (hFlush, stdout)
 import           Web.Authenticate.OAuth (OAuth(..), Credential(..))
@@ -28,19 +36,8 @@ import qualified Data.Conduit.List as CL
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Web.Authenticate.OAuth as OA
-import           Data.Acid
-import           Data.SafeCopy
-import           Data.Typeable
-import           Data.String.Utils
-
-import Language.Haskell.Interpreter (runInterpreter)
-
-import Mueval.Interpreter
-import Mueval.ArgsParse
 
 import Tokens
-
-{-import Debug.Trace-}
 
 authorize :: (MonadBaseControl IO m, MonadResource m)
           => OAuth -- ^ OAuth Consumer key and secret
@@ -151,10 +148,10 @@ conduitmain :: IO ()
 conduitmain = do
   state <- openLocalState (LambdaTwitDb [])
   forever $ do
-    {-TODO: Use Data.Configurator to read in the oauth keys without needing a recompile-}
+    {-TODO: Use Data.Configurator to read in the oauth keys without needing a recompile: 
+    - http://hackage.haskell.org/package/configurator-}
     let env = setCredential tokens creds def in
       runNoLoggingT . runTW env $ do
-        {-liftIO . putStrLn $ "# your mentions timeline (up to 100 tweets):"-}
         sourceWithMaxId mentionsTimeline
              C.$= CL.isolate 100
              C.$$ CL.mapM_ $ \status -> do
@@ -163,17 +160,27 @@ conduitmain = do
                    then do
                      liftIO $ putStrLn "Already replied to:"
                      liftIO $ T.putStrLn $ statusToText status
-                     liftIO $ threadDelay $ 60 * 1000000
                    else do
-                     liftIO $ T.putStrLn $ statusToText status
-                     res <- evalExpression status
-                     liftIO $ putStrLn res
-                     postres <- postreply status (status ^. statusId) res
+                     when ((status ^. statusUser ^. userScreenName) /= botScreenName) $ do
+                       liftIO $ T.putStrLn $ statusToText status
+                       res <- evalExpression status
+                       liftIO $ putStrLn res
+                       postres <- try $ postreply status (status ^. statusId) res
+                       case postres of
+                         Left (FromJSONError e) -> liftIO $ print e
+                         Left (TwitterErrorResponse s resH errs) ->
+                           liftIO $ print errs
+                         Left (TwitterStatusError s resH val) ->
+                           liftIO $ print val
+                         Right status -> liftIO $ print $ statusToText status
                      liftIO $ Data.Acid.update state (AddReply $ TweetId (status ^. statusId))
-                     liftIO $ print postres
+                     -- AA TODO: Better rate limiting, this probably blocks every tweet.
+                     -- We should only wait for 60 seconds after each mentionsTimeline grab 
                      liftIO $ threadDelay $ 60 * 1000000
 
 --First Run:
+--TODO: split this out into a separate exe. oauth_pin.hs from
+--twitter-conduit/samples
 firstrunMain :: IO ()
 firstrunMain = runNoLoggingT . withCredential $ do
     liftIO . putStrLn $ "Copy the creds above into your Token.hs file."
@@ -183,26 +190,6 @@ main :: IO ()
 main = conduitmain
 {-main = firstrunMain-}
 
-{-TODO: Test html decoding:-}
-{-lambdagrrl: @LambdaTwit (*) &lt;$&gt; [1..10] &lt;*&gt; [1..10]-}
+{-TODO: Import lens:-}
+{-https://twitter.com/relrod6/status/516785803100688384-}
 
-
-{-[>Testing eval<]-}
-{-testEval :: IO ()-}
-{-testEval =-}
-    {-[>let expr = T.pack "\"life \63743 = \" ++ show (7 * 6)" in<]-}
-    {-let expr = T.pack $ decodeHtml "4 &lt; 42" in-}
-      {-case getOptions ["--expression", T.unpack expr] of-}
-        {-Right opts -> do-}
-          {-sTest <- evalExpr $ decodeHtml $ T.unpack expr-}
-          {-T.putStrLn $ T.pack $ "sTest: " ++ sTest-}
-          {-r <- runInterpreter (interpreter opts)-}
-          {-case r of-}
-              {-Left err -> traceShow "eval error: " $ printInterpreterError err-}
-              {-Right (e,et,val) -> do when (printType opts)-}
-                                          {-(sayIO e >> sayIOOneLine et)-}
-                                     {-sayIO val-}
-               {-where sayIOOneLine = sayIO . unwords . words-}
-        {-Left t@(b, e) -> putStrLn $ show t-}
-
-{-main = testEval-}
