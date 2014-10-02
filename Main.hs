@@ -160,6 +160,7 @@ conduitmain = do
                    then do
                      liftIO $ putStrLn "Already replied to:"
                      liftIO $ T.putStrLn $ statusToText status
+                     liftIO $ threadDelay $ 60 * 1000000
                    else do
                      when ((status ^. statusUser ^. userScreenName) /= botScreenName) $ do
                        liftIO $ T.putStrLn $ statusToText status
