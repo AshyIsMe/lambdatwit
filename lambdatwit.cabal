@@ -21,7 +21,9 @@ executable lambdatwit
                , acid-state
                , authenticate-oauth
                , bytestring
+               , case-insensitive
                , conduit
+               , containers
                , data-default
                , exceptions
                , hint
@@ -32,6 +34,7 @@ executable lambdatwit
                , monad-logger
                , mtl
                , mueval
+               , network-uri
                , resourcet
                , safecopy
                , text
@@ -42,4 +45,23 @@ executable lambdatwit
                , utf8-string
 
   -- hs-source-dirs:      
+  default-language:    Haskell2010
+
+executable oauth_pin
+  main-is: oauth_pin.hs
+
+  build-depends:
+      base >= 4.5 && < 5
+    , containers
+    , transformers-base
+    , transformers
+    , monad-control
+    , bytestring
+    , text
+    , resourcet
+    , conduit
+    , http-types
+    , http-conduit
+    , authenticate-oauth
+    , twitter-conduit
   default-language:    Haskell2010

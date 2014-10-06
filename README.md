@@ -6,4 +6,15 @@ LambdaTwit: Lambdabot running as a twitter bot. Similar to the @fsibot f# bot.
 
 Bot is running at: https://twitter.com/LambdaTwit
 
-To set up your own one you'll need to put your api keys in Tokens.hs  (see Tokens.hs.sample).
+##First Run
+We need to set the twitter oauth keys into the environment vars like so:
+```
+$ export OAUTH_CONSUMER_KEY="YOUR APPLICATION CONSUMER KEY"
+$ export OAUTH_CONSUMER_SECRET="YOUR APPLICATION CONSUMER SECRET"
+$ cabal run oauth_pin
+
+$ export OAUTH_ACCESS_TOKEN="YOUR ACCESS TOKEN"
+$ export OAUTH_ACCESS_SECRET="YOUR ACCESS SECRET"
+$ cabal run lambdatwit
+```
+

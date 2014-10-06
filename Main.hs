@@ -38,35 +38,10 @@ import qualified Data.Text.IO as T
 import qualified Web.Authenticate.OAuth as OA
 
 import Tokens
+import Common
 
-authorize :: (MonadBaseControl IO m, MonadResource m)
-          => OAuth -- ^ OAuth Consumer key and secret
-          -> (String -> m String) -- ^ PIN prompt
-          -> Manager
-          -> m Credential
-authorize oauth getPIN mgr = do
-    cred <- OA.getTemporaryCredential oauth mgr
-    let url = OA.authorizeUrl oauth cred
-    pin <- getPIN url
-    OA.getAccessToken oauth (OA.insert "oauth_verifier" (B8.pack pin) cred) mgr
-
-withCredential :: (MonadLogger m, MonadBaseControl IO m, MonadIO m) => TW (ResourceT m) a -> m a
-withCredential task = do
-    cred <- liftIO $ withManager $ \mgr -> authorize tokens getPIN mgr
-    _ <- liftIO $ putStrLn $ show cred
-    let env = setCredential tokens cred def
-    runTW env task
-  where
-    getPIN url = liftIO $ do
-        putStrLn $ "browse URL: " ++ url
-        putStr "> what was the PIN twitter provided you with? "
-        hFlush stdout
-        getLine
-
-
-isHaskellExpression :: T.Text -> T.Text -> Bool
-isHaskellExpression myUserName post = T.isPrefixOf myUserName post
-
+-- Strip off the first world (which is assumed to be the screenname of the
+-- bot).
 getHaskellExpression :: T.Text -> T.Text
 getHaskellExpression t =
     case T.breakOn " " $ T.strip t of
@@ -75,7 +50,8 @@ getHaskellExpression t =
 
 isHaskellPost :: T.Text -> Status -> Bool
 isHaskellPost userName status =
-    T.isPrefixOf userName $ status ^. statusText
+    (T.isPrefixOf userName $ status ^. statusText) &&
+    (status ^. statusUser ^. userScreenName) /= botScreenName
 
 evalExpr :: String -> IO String
 evalExpr e =
@@ -150,46 +126,36 @@ conduitmain = do
   forever $ do
     {-TODO: Use Data.Configurator to read in the oauth keys without needing a recompile: 
     - http://hackage.haskell.org/package/configurator-}
-    let env = setCredential tokens creds def in
-      runNoLoggingT . runTW env $ do
-        sourceWithMaxId mentionsTimeline
-             C.$= CL.isolate 100
-             C.$$ CL.mapM_ $ \status -> do
-                 replies <- liftIO $ query state AllReplies
-                 if ((TweetId (status ^. statusId)) `elem` replies)
-                   then do
-                     liftIO $ putStrLn "Already replied to:"
+    runNoLoggingT . runTwitterFromEnv $ do
+      sourceWithMaxId mentionsTimeline
+           C.$= CL.isolate 100
+           C.$$ CL.mapM_ $ \status -> do
+               replies <- liftIO $ query state AllReplies
+               if ((TweetId (status ^. statusId)) `elem` replies)
+                 then do
+                   liftIO $ putStrLn "Already replied to:"
+                   liftIO $ T.putStrLn $ statusToText status
+                   liftIO $ threadDelay $ 60 * 1000000
+                 else do
+                   when (isHaskellPost botScreenName status) $ do
                      liftIO $ T.putStrLn $ statusToText status
-                     liftIO $ threadDelay $ 60 * 1000000
-                   else do
-                     when ((status ^. statusUser ^. userScreenName) /= botScreenName) $ do
-                       liftIO $ T.putStrLn $ statusToText status
-                       res <- evalExpression status
-                       liftIO $ putStrLn res
-                       postres <- try $ postreply status (status ^. statusId) res
-                       case postres of
-                         Left (FromJSONError e) -> liftIO $ print e
-                         Left (TwitterErrorResponse s resH errs) ->
-                           liftIO $ print errs
-                         Left (TwitterStatusError s resH val) ->
-                           liftIO $ print val
-                         Right status -> liftIO $ print $ statusToText status
-                     liftIO $ Data.Acid.update state (AddReply $ TweetId (status ^. statusId))
-                     -- AA TODO: Better rate limiting, this probably blocks every tweet.
-                     -- We should only wait for 60 seconds after each mentionsTimeline grab 
-                     liftIO $ threadDelay $ 60 * 1000000
-
---First Run:
---TODO: split this out into a separate exe. oauth_pin.hs from
---twitter-conduit/samples
-firstrunMain :: IO ()
-firstrunMain = runNoLoggingT . withCredential $ do
-    liftIO . putStrLn $ "Copy the creds above into your Token.hs file."
-    liftIO . putStrLn $ "Then swap out the main function in Main.hs and recompile."
+                     res <- evalExpression status
+                     liftIO $ putStrLn res
+                     postres <- try $ postreply status (status ^. statusId) res
+                     case postres of
+                       Left (FromJSONError e) -> liftIO $ print e
+                       Left (TwitterErrorResponse s resH errs) ->
+                         liftIO $ print errs
+                       Left (TwitterStatusError s resH val) ->
+                         liftIO $ print val
+                       Right status -> liftIO $ print $ statusToText status
+                   liftIO $ Data.Acid.update state (AddReply $ TweetId (status ^. statusId))
+                   -- AA TODO: Better rate limiting, this probably blocks every tweet.
+                   -- We should only wait for 60 seconds after each mentionsTimeline grab 
+                   liftIO $ threadDelay $ 60 * 1000000
 
 main :: IO ()
 main = conduitmain
-{-main = firstrunMain-}
 
 {-TODO: Import lens:-}
 {-https://twitter.com/relrod6/status/516785803100688384-}
