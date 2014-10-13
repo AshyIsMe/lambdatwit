@@ -15,27 +15,20 @@ import           Control.Monad.IO.Class
 import           Control.Monad.Logger
 import           Control.Monad.Reader (ask)
 import           Control.Monad.State (modify)
-import           Control.Monad.Trans.Control
 import           Control.Monad.Trans.Resource
 import           Data.Acid
-import           Data.Default
 import           Data.SafeCopy
 import           Data.String.Utils
 import           Data.Typeable
 import           Language.Haskell.Interpreter (runInterpreter)
 import           Mueval.ArgsParse
 import           Mueval.Interpreter
-import           Network.HTTP.Conduit
-import           System.IO (hFlush, stdout)
-import           Web.Authenticate.OAuth (OAuth(..), Credential(..))
 import           Web.Twitter.Conduit
 import           Web.Twitter.Types.Lens
-import qualified Data.ByteString.Char8 as B8
 import qualified Data.Conduit as C
 import qualified Data.Conduit.List as CL
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import qualified Web.Authenticate.OAuth as OA
 
 import Tokens
 import Common
@@ -124,7 +117,7 @@ conduitmain :: IO ()
 conduitmain = do
   state <- openLocalState (LambdaTwitDb [])
   forever $ do
-    {-TODO: Use Data.Configurator to read in the oauth keys without needing a recompile: 
+    {-TODO: Use Data.Configurator to read in the oauth keys without needing a recompile:
     - http://hackage.haskell.org/package/configurator-}
     runNoLoggingT . runTwitterFromEnv $ do
       sourceWithMaxId mentionsTimeline
@@ -151,7 +144,7 @@ conduitmain = do
                        Right status -> liftIO $ print $ statusToText status
                    liftIO $ Data.Acid.update state (AddReply $ TweetId (status ^. statusId))
                    -- AA TODO: Better rate limiting, this probably blocks every tweet.
-                   -- We should only wait for 60 seconds after each mentionsTimeline grab 
+                   -- We should only wait for 60 seconds after each mentionsTimeline grab
                    liftIO $ threadDelay $ 60 * 1000000
 
 main :: IO ()

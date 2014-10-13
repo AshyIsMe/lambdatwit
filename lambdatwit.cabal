@@ -4,20 +4,27 @@
 name:                lambdatwit
 version:             0.1.0.0
 synopsis:            Lambdabot running as a twitter bot. Similar to the @fsibot f# bot.
--- description:         
+description:         A twitter bot using mueval to evaluate haskell tweets.
+                     Further info: <https://github.com/AshyIsMe/lambdatwit/blob/master/README.md>
 license:             MIT
 license-file:        LICENSE
 author:              Aaron Ash
 maintainer:          aaron.ash@gmail.com
+homepage:            http://github.com/ashyisme/lambdatwit
+bug-reports:         https://github.com/ashyisme/lambdatwit/issues
 -- copyright:           
 category:            Web
 build-type:          Simple
 -- extra-source-files:  
 cabal-version:       >=1.10
 
+source-repository head
+  type:              git
+  location:          https://github.com/ashyisme/lambdatwit.git
+
 executable lambdatwit
   main-is: Main.hs
-  build-depends: base >=4.6 && <4.7
+  build-depends: base 
                , acid-state
                , authenticate-oauth
                , bytestring
